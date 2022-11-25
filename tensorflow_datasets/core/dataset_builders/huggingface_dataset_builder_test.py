@@ -26,6 +26,13 @@ from tensorflow_datasets.core import registered
 from tensorflow_datasets.core.dataset_builders import huggingface_dataset_builder
 
 
+try:
+  hf_datasets = lazy_imports_lib.lazy_imports.datasets
+except ImportError:
+  # These tests are only launched when `datasets` can be imported.
+  pass
+
+
 class FakeHfDatasets:
 
   def list_datasets(self):
@@ -155,6 +162,45 @@ def test_convert_value_dict():
   ) == {"de": b"Hallo Welt", "en": b"Hello world", "fr": b""}
 
 
+def test_errors_are_ignored_or_not_when_generating_examples():
+  hf_datasets.load_dataset = mock.MagicMock()
+  hf_datasets.load_dataset_builder = mock.MagicMock()
+  hf_datasets.load_dataset_builder.return_value.info.citation = "citation"
+  hf_datasets.load_dataset_builder.return_value.info.description = "description"
+  hf_datasets.load_dataset_builder.return_value.info.supervised_keys = None
+  hf_datasets.load_dataset_builder.return_value.info.version = "1.0.0"
+  hf_datasets.load_dataset_builder.return_value.info.features = {
+      "feature": hf_datasets.Value("int32")
+  }
+
+  with mock.patch.object(
+      huggingface_dataset_builder,
+      "_convert_example",
+      side_effect=AttributeError("one error"),
+  ):
+    # Ignore exceptions
+    builder = huggingface_dataset_builder.HuggingfaceDatasetBuilder(
+        hf_repo_id="foo/bar",
+        ignore_verifications=True,
+    )
+    for _ in builder._generate_examples(range(1)):
+      continue
+    assert builder.generation_errors == [[0, "one error"]]
+
+    # Do not ignore exceptions
+    builder = huggingface_dataset_builder.HuggingfaceDatasetBuilder(
+        hf_repo_id="foo/bar",
+        ignore_verifications=False,
+    )
+    huggingface_dataset_builder._convert_examples = mock.Mock(
+        side_effect=AttributeError("one error")
+    )
+    with pytest.raises(AttributeError, match="one error"):
+      for _ in builder._generate_examples(range(1)):
+        continue
+    assert not builder.generation_errors
+
+
 # Encapsulate test parameters into a fixture to avoid `datasets` import during
 # tests collection.
 # https://docs.pytest.org/en/7.2.x/example/parametrize.html#deferring-the-setup-of-parametrized-resources
@@ -187,13 +233,11 @@ def get_features(request):
               "meta": feature_lib.FeaturesDict({
                   "left_context": feature_lib.Scalar(dtype=np.str_),
                   "partial_evidence": feature_lib.Sequence({
-                      "meta": feature_lib.FeaturesDict(
-                          {
-                              "evidence_span": feature_lib.Sequence(
-                                  feature_lib.Scalar(dtype=np.str_)
-                              ),
-                          }
-                      ),
+                      "meta": feature_lib.FeaturesDict({
+                          "evidence_span": feature_lib.Sequence(
+                              feature_lib.Scalar(dtype=np.str_)
+                          ),
+                      }),
                       "start_id": feature_lib.Scalar(dtype=np.int32),
                   }),
               }),
