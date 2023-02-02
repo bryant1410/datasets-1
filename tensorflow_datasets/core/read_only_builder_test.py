@@ -295,6 +295,7 @@ def test_find_builder_dir_with_namespace_given():
 
 @error_utils.reraise_with_context(registered.DatasetNotFoundError)
 def test_find_builder_dir_with_multiple_data_dir(mock_fs: testing.MockFs):
+  flags.FLAGS.array_record_default = False
 
   mock_fs.add_file('path/to/ds0/1.0.0/features.json')
 

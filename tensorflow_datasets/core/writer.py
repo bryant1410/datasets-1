@@ -264,6 +264,7 @@ class Writer(object):
         iterator = itertools.islice(
             examples_generator, 0, shard_spec.examples_number
         )
+        print('WRITING>>>>>>>>>>>>', shard_spec.path, iterator, self._file_format)
         record_keys = _write_examples(
             shard_spec.path, iterator, self._file_format
         )
