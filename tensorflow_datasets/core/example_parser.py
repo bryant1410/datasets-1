@@ -109,11 +109,8 @@ class ExampleParserNp(Parser):
       self, serialized_example: bytes
   ) -> type_utils.NpArrayOrScalarDict:
     example = example_pb2.Example.FromString(serialized_example)
-    with utils.try_reraise(f"Error wile parsing example {example}: "):
-      np_example = _features_to_numpy(
-          example.features, self._flat_example_specs
-      )
-      return utils.pack_as_nest_dict(np_example, self.example_specs)
+    np_example = _features_to_numpy(example.features, self._flat_example_specs)
+    return utils.pack_as_nest_dict(np_example, self.example_specs)
 
 
 def _features_to_numpy(
@@ -140,9 +137,10 @@ def _features_to_numpy(
           f"Malformed input: {key} is found in the feature, but not in"
           f" {flat_example_specs}"
       )
-    parsed_example[key] = _feature_to_numpy(
-        feature_map[key], flat_example_specs[key], key
-    )
+    with utils.try_reraise(f"Error wile parsing feature {key}: "):
+      parsed_example[key] = _feature_to_numpy(
+          feature_map[key], flat_example_specs[key], key
+      )
   return parsed_example
 
 
@@ -167,11 +165,6 @@ def _feature_to_numpy(
   """
   dtype = tensor_info.np_dtype
   shape = tensor_info.shape
-  if None in shape:
-    raise ValueError(
-        f"tensors with shape ({shape}) including None are not supported when"
-        " decoding with NumPy."
-    )
   if feature.HasField("int64_list"):
     value_array = feature.int64_list.value
   elif feature.HasField("float_list"):
@@ -180,11 +173,15 @@ def _feature_to_numpy(
     value_array = feature.bytes_list.value
   else:
     raise AttributeError(f"cannot convert '{feature_name}' from proto to NumPy")
-  array = np.array(value_array, dtype=dtype).reshape(shape)
   if not shape:
-    if array.size != 1:
-      raise ValueError(f"scalar feature '{feature_name}' should have length 1")
-    return array.item()
+    return np.array(value_array, dtype=dtype).item()
+  if shape.count(None) > 1:
+    raise ValueError(
+        f"tensors with shape ({shape}) including None are not supported when"
+        " decoding with NumPy."
+    )
+  np_shape = tuple(dim if dim is not None else -1 for dim in shape)
+  array = np.array(value_array, dtype=dtype).reshape(np_shape)
   return array
 
 

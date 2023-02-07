@@ -38,13 +38,20 @@ NpArrayOrScalar = Union[bytes, float, int, np.ndarray, str]
 if typing.TYPE_CHECKING:
   Tensor = Union[tf.Tensor, tf.SparseTensor, tf.RaggedTensor]
   TfdsDType = Union[np.dtype, tf.DType, tf.dtypes.DType]
+  from PIL import Image as PIL_Image  # pylint: disable=g-import-not-at-top
+
+  NpDecodedImage = Union[np.ndarray, PIL_Image.Image]
 else:
   Tensor = Any
   TfdsDType = Any
+  NpDecodedImage = Any
+
+NpDecodedExample = Union[NpArrayOrScalar, NpDecodedImage]
 
 # Nested dict of tensor
 TensorDict = TreeDict[Tensor]
 NpArrayOrScalarDict = TreeDict[NpArrayOrScalar]
+NpDecodedExampleDict = TreeDict[NpDecodedExample]
 
 Dim = Optional[int]
 Shape = TupleOrList[Dim]

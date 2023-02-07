@@ -153,7 +153,7 @@ class TopLevelFeature(feature_lib.FeatureConnector):
       serialized_example: Union[tf.Tensor, bytes],
       *,
       decoders=None,
-  ) -> utils.NpArrayOrScalarDict:
+  ) -> utils.NpDecodedExampleDict:
     example_data = self._example_parser_np.parse_example(serialized_example)
     return self.decode_example_np(example_data, decoders=decoders)
 

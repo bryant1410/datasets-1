@@ -18,12 +18,14 @@
 from __future__ import annotations
 
 import dataclasses
+import io
 import os
 import tempfile
 from typing import Any, List, Optional, Union
 
 from etils import epath
 import numpy as np
+from tensorflow_datasets.core import lazy_imports_lib
 from tensorflow_datasets.core import utils
 from tensorflow_datasets.core.features import feature as feature_lib
 from tensorflow_datasets.core.proto import feature_pb2
@@ -218,6 +220,7 @@ class Image(feature_lib.FeatureConnector):
       encoding_format: Optional[str] = None,
       use_colormap: bool = False,
       doc: feature_lib.DocArg = None,
+      as_pil_image: bool = False,
   ):
     """Construct the connector.
 
@@ -239,6 +242,7 @@ class Image(feature_lib.FeatureConnector):
         `tfds.as_dataframe` will display each value in the image with a
         different color.
       doc: Documentation of this feature (e.g. description).
+      as_pil_image: Whether to return a PIL image when decoding without TF.
 
     Raises:
       ValueError: If the shape is invalid
@@ -253,6 +257,7 @@ class Image(feature_lib.FeatureConnector):
     self._use_colormap = _get_and_validate_colormap(
         use_colormap, self._shape, self._dtype, self._encoding_format
     )
+    self.as_pil_image = as_pil_image
 
     if self._dtype == np.float32:  # Float images encoded as 4-channels uint8
       self._image_encoder = _FloatImageEncoder(
@@ -289,8 +294,27 @@ class Image(feature_lib.FeatureConnector):
     return self._image_encoder.encode_image_or_path(image_or_path_or_fobj)
 
   def decode_example(self, example):
-    """Reconstruct the image from the tf example."""
+    """Reconstruct the image with TensorFlow from the tf example."""
     return self._image_encoder.decode_image(example)
+
+  def decode_example_np(self, example: bytes) -> type_utils.NpDecodedImage:
+    """Reconstruct the image with PIL from bytes."""
+    PIL_Image = lazy_imports_lib.lazy_imports.PIL_Image  # pylint: disable=invalid-name
+    bytes_io = io.BytesIO(example)
+    with PIL_Image.open(bytes_io) as image:
+      if self.as_pil_image:
+        return image
+      dtype = self.np_dtype if self.np_dtype != np.float32 else np.uint8
+      np_array = np.asarray(image, dtype=dtype)
+      # Reshape the array if needed.
+      if self._shape != np_array.shape and None not in self._shape:
+        np_array = np_array.reshape(self._shape)
+      if self.np_dtype == np.uint8:
+        return np_array
+      # Bitcast 4 channels uint8 -> 1 channel float32.
+      if self.np_dtype == np.float32:
+        return np_array.view(np.float32)
+      return np_array * _scaling_factor_from_int8(self.np_dtype)
 
   def repr_html(self, ex: np.ndarray) -> str:
     """Images are displayed as thumbnail."""
@@ -493,3 +517,14 @@ def _validate_np_array(
         f'Image dtype should be {dtype}. Detected: {np_array.dtype}.'
     )
   utils.assert_shape_match(np_array.shape, shape)
+
+
+@py_utils.memoize()
+def _scaling_factor_from_int8(np_dtype: np.dtype) -> int:
+  if np_dtype == np.uint8:
+    return 1
+  if np_dtype == np.uint16:
+    return int((2**16 - 1) / (2**8 - 1))
+  if np_dtype == np.uint32:
+    return int((2**32 - 1) / (2**8 - 1))
+  raise ValueError(f'DType {np_dtype} is not supported for images.')

@@ -55,7 +55,7 @@ class ImageFeatureTest(
     with tf.io.gfile.GFile(img_file_path, 'rb') as f:
       img_byte_content = f.read()
     img_file_expected_content = np.array(
-        [  # see tests_data/README.md
+        [  # see tensorflow_datasets/testing/test_data/README.md
             [[0, 255, 0, 255], [255, 0, 0, 255], [255, 0, 255, 255]],
             [[0, 0, 255, 255], [255, 255, 0, 255], [126, 127, 128, 255]],
         ],
@@ -64,7 +64,10 @@ class ImageFeatureTest(
         :, :, :channels
     ]  # Truncate (h, w, 4) -> (h, w, c)
     if dtype == np.uint16 or dtype == tf.uint16:
-      img_file_expected_content *= 257  # Scale int16 images
+      # Scale int16 images
+      img_file_expected_content *= 257
+      img *= 257
+      img_other_shape *= 257
 
     self.assertFeature(
         feature=features_lib.Image(shape=(None, None, channels), dtype=dtype),
@@ -75,43 +78,51 @@ class ImageFeatureTest(
             testing.FeatureExpectationItem(
                 value=img,
                 expected=img,
+                expected_np=img,
             ),
             # File path
             testing.FeatureExpectationItem(
                 value=img_file_path,
                 expected=img_file_expected_content,
+                expected_np=img_file_expected_content,
             ),
             # File Path
             testing.FeatureExpectationItem(
                 value=pathlib.Path(img_file_path),
                 expected=img_file_expected_content,
+                expected_np=img_file_expected_content,
             ),
             # Images bytes
             testing.FeatureExpectationItem(
                 value=img_byte_content,
                 expected=img_file_expected_content,
+                expected_np=img_file_expected_content,
             ),
             # 'img' shape can be dynamic
             testing.FeatureExpectationItem(
                 value=img_other_shape,
                 expected=img_other_shape,
+                expected_np=img_other_shape,
             ),
             # Invalid type
             testing.FeatureExpectationItem(
                 value=randint(256, size=(128, 128, channels), dtype=np.uint32),
                 raise_cls=ValueError,
+                raise_cls_np=ValueError,
                 raise_msg='dtype should be',
             ),
             # Invalid number of dimensions
             testing.FeatureExpectationItem(
                 value=randint(256, size=(128, 128), dtype=np_dtype),
                 raise_cls=ValueError,
+                raise_cls_np=ValueError,
                 raise_msg='must have the same rank',
             ),
             # Invalid number of channels
             testing.FeatureExpectationItem(
                 value=randint(256, size=(128, 128, 1), dtype=np_dtype),
                 raise_cls=ValueError,
+                raise_cls_np=ValueError,
                 raise_msg='are incompatible',
             ),
         ],
@@ -137,11 +148,13 @@ class ImageFeatureTest(
             testing.FeatureExpectationItem(
                 value=img_shaped,
                 expected=img_shaped,
+                expected_np=img_shaped,
             ),
             # 'img_shaped' shape should be static
             testing.FeatureExpectationItem(
                 value=randint(256, size=(31, 64, 1), dtype=np.uint8),
                 raise_cls=ValueError,
+                raise_cls_np=ValueError,
                 raise_msg='are incompatible',
             ),
         ],
@@ -168,16 +181,19 @@ class ImageFeatureTest(
             testing.FeatureExpectationItem(
                 value=img,
                 expected=img,
+                expected_np=img,
             ),
             # 'img' shape can be dynamic
             testing.FeatureExpectationItem(
                 value=img_other_shape,
                 expected=img_other_shape,
+                expected_np=img_other_shape,
             ),
             # Invalid type
             testing.FeatureExpectationItem(
                 value=img.astype(np.float64),
                 raise_cls=ValueError,
+                raise_cls_np=ValueError,
                 raise_msg='dtype should be',
             ),
         ],
